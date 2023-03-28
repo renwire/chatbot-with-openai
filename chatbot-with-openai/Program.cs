@@ -1,8 +1,10 @@
-﻿using System;
+using System;
+using System.IO;
 using System.Net.Http;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ChatGPTExample
 {
@@ -10,38 +12,74 @@ namespace ChatGPTExample
     {
         static async Task Main(string[] args)
         {
-            string apiKey = "YOUR_API_KEY_HERE";
-            string prompt = "Hello, how are you?";
+            string keyLocation = "/path/to/file.txt";
+            string apiKey = File.ReadAllText(keyLocation);
+            string aiVersion = "/path/to/file.txt";
+            string prompt = File.ReadAllText(aiVersion);
 
             HttpClient httpClient = new HttpClient();
-            string baseUrl = "https://api.openai.com/v1/engines/davinci-codex/completions";
+            string baseUrl = "https://api.openai.com/v1/completions";
 
-            var requestData = new
+            bool continueChat = true;
+
+            StreamWriter logFile = new StreamWriter("log.txt", true);
+
+            while (continueChat)
             {
-                prompt = prompt,
-                max_tokens = 50
-            };
+                Console.WriteLine("Please enter your prompt or type 'exit' to quit:");
+                prompt += "\n User:" + Console.ReadLine();
 
-            var jsonRequest = JsonSerializer.Serialize(requestData);
-
-            var httpRequest = new HttpRequestMessage
-            {
-                Method = HttpMethod.Post,
-                RequestUri = new Uri(baseUrl),
-                Headers =
+                if (prompt.ToLower() == "exit")
                 {
-                    { "Authorization", $"Bearer {apiKey}" }
-                },
-                Content = new StringContent(jsonRequest, Encoding.UTF8, "application/json")
-            };
+                    continueChat = false;
+                    break;
+                }
 
-            var httpResponse = await httpClient.SendAsync(httpRequest);
-            var jsonResponse = await httpResponse.Content.ReadAsStringAsync();
+                var requestData = new
+                {
+                    model = "text-davinci-003",
+                    prompt = prompt,
+                    temperature = 0.7,
+                    max_tokens = 256,
+                    top_p = 1,
+                    frequency_penalty = 0,
+                    presence_penalty = 0
+                };
 
-            var responseData = JsonSerializer.Deserialize<dynamic>(jsonResponse);
-            string responseText = responseData.choices[0].text;
+                var jsonRequest = JsonConvert.SerializeObject(requestData);
 
-            Console.WriteLine(responseText);
+                var httpRequest = new HttpRequestMessage
+                {
+                    Method = HttpMethod.Post,
+                    RequestUri = new Uri(baseUrl),
+                    Headers =
+                    {
+                        { "Authorization", $"Bearer {apiKey}" }
+                    },
+                    Content = new StringContent(jsonRequest, Encoding.UTF8, "application/json")
+                };
+
+                var httpResponse = await httpClient.SendAsync(httpRequest);
+                var jsonResponse = await httpResponse.Content.ReadAsStringAsync();
+
+                JObject responseData = JsonConvert.DeserializeObject<JObject>(jsonResponse);
+                string responseText = responseData["choices"][0]["text"].ToString();
+
+                Console.WriteLine($"Starbright: {responseText}\n");
+
+                // Write the user's response and AI's response to the log file
+                logFile.WriteLine($"User: {prompt}");
+                logFile.WriteLine($"Starbright: {responseText}\n");
+
+                // Reset the prompt for the next iteration
+                prompt = File.ReadAllText(aiVersion);
+            }
+
+            // Close the log file
+
+            // figure out how to add this to the SB v0.2.5.txt instead of creating a new file
+
+            logFile.Close();
         }
     }
 }
